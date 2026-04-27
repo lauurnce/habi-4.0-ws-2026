@@ -57,6 +57,8 @@ function getMockAIResponse(userInput: string, systemPrompt: string): MockAIRespo
 export async function processTriageLog(
   userId: string,
   userInput: string,
+  phq9Score: number,
+  gad7Score: number,
 ): Promise<TriageLog> {
   const cleanUserId = userId.trim();
   const cleanInput = userInput.trim();
@@ -67,6 +69,14 @@ export async function processTriageLog(
 
   if (!cleanInput) {
     throw new Error('processTriageLog failed: userInput is required.');
+  }
+
+  if (!isFinite(phq9Score) || phq9Score < 0) {
+    throw new Error('processTriageLog failed: phq9Score must be a non-negative number.');
+  }
+
+  if (!isFinite(gad7Score) || gad7Score < 0) {
+    throw new Error('processTriageLog failed: gad7Score must be a non-negative number.');
   }
 
   const referenceNumber = generateReferenceNumber();
@@ -82,6 +92,8 @@ export async function processTriageLog(
   const payload: Omit<TriageLog, 'id' | 'created_at'> = {
     user_id: cleanUserId,
     user_free_text: cleanInput,
+    phq9_score: phq9Score,
+    gad7_score: gad7Score,
     ai_triage_pathway: mockAI.ai_triage_pathway,
     loa_recommended: mockAI.loa_recommended,
     ai_reasoning: mockAI.ai_reasoning,
