@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -9,30 +9,43 @@ import {
   TextInput,
   View,
 } from "react-native";
+import { Ionicons } from "@expo/vector-icons";
+
 
 import { Card } from "../components/Card";
+import { ProgressBar } from "../components/ProgressBar";
+import { LOATracker, LOAStatus } from "../components/LOATracker";
+import { loaState } from "../lib/loaState";
 import { supabase } from "../lib/supabase";
-import { processTriageLog } from "../services/triageService";
+
 
 function StatCard({
   label,
   value,
   helper,
+  icon,
 }: {
   label: string;
   value: string;
   helper: string;
+  icon: keyof typeof Ionicons.glyphMap;
 }) {
   return (
-    <Card className="flex-1">
-      <Text className="text-xs font-medium text-neutral-500">{label}</Text>
-      <Text className="mt-2 text-2xl font-bold text-neutral-900">{value}</Text>
-      <Text className="mt-1 text-xs text-neutral-500">{helper}</Text>
+    <Card className="flex-1 p-5 border-none bg-white shadow-sm">
+      <View className="flex-row items-center justify-between">
+        <View className="h-10 w-10 items-center justify-center rounded-2xl bg-neutral-50">
+          <Ionicons name={icon} size={20} color="#4FB99F" />
+        </View>
+      </View>
+      <View className="mt-4">
+        <Text className="text-3xl font-bold text-neutral-900 font-jakarta-bold">{value}</Text>
+        <Text className="text-xs font-medium text-neutral-500 mt-1 font-jakarta">{label}</Text>
+        <Text className="mt-2 text-[10px] text-neutral-400 italic font-jakarta">{helper}</Text>
+      </View>
     </Card>
   );
 }
 
-const LOCAL_TEST_USER_ID = "509c5ac9-e461-448c-b26b-66425b7ef65";
 const ASSESSMENT_OPTIONS = [
   { value: 0, label: "Not at all" },
   { value: 1, label: "Several days" },
@@ -61,52 +74,71 @@ const ASSESSMENT_QUESTIONS = [
 function QuickAction({
   title,
   subtitle,
+  icon,
   onPress,
-  isHighlighted = false,
 }: {
   title: string;
   subtitle: string;
+  icon: keyof typeof Ionicons.glyphMap;
   onPress?: () => void;
-  isHighlighted?: boolean;
 }) {
   return (
     <Pressable onPress={onPress}>
-      <Card
-        className={`flex-row items-center justify-between ${
-          isHighlighted ? "bg-rose-50" : ""
-        }`}
-      >
-        <View className="gap-1">
-          <Text className="text-base font-semibold text-neutral-900">
+      <Card className="flex-row items-center p-4 border-none bg-white shadow-sm">
+        <View className="h-12 w-12 items-center justify-center rounded-2xl bg-neutral-50 mr-4">
+          <Ionicons name={icon} size={24} color="#2D3748" />
+        </View>
+        <View className="flex-1 gap-1">
+          <Text className="text-base font-semibold text-neutral-900 font-jakarta-bold">
             {title}
           </Text>
-          <Text className="text-xs text-neutral-500">{subtitle}</Text>
+          <Text className="text-xs text-neutral-500 font-jakarta">{subtitle}</Text>
         </View>
-        <View
-          className={`h-10 w-10 items-center justify-center rounded-full ${
-            isHighlighted ? "bg-rose-100" : "bg-neutral-100"
-          }`}
-        >
-          <Text className="text-neutral-900">{">"}</Text>
-        </View>
+        <Ionicons name="chevron-forward" size={20} color="#A3A3A3" />
       </Card>
     </Pressable>
   );
 }
 
-export function DashboardScreen() {
+export function DashboardScreen({ navigation }: any) {
+  const [userName, setUserName] = useState<string>("there");
   const [isTriageModalVisible, setIsTriageModalVisible] = useState(false);
+  const [triageStep, setTriageStep] = useState(0);
   const [assessmentAnswers, setAssessmentAnswers] = useState<Array<number | null>>(
     Array.from({ length: ASSESSMENT_QUESTIONS.length }, () => null)
   );
   const [additionalNotes, setAdditionalNotes] = useState("");
   const [isSubmittingTriage, setIsSubmittingTriage] = useState(false);
+  const [loaStatus, setLoaStatus] = useState<LOAStatus>(loaState.getStatus());
+
+  useEffect(() => {
+    return loaState.subscribe((status) => setLoaStatus(status));
+  }, []);
+
+  useEffect(() => {
+    async function fetchProfile() {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        const { data: profile } = await supabase
+          .from("profiles")
+          .select("nickname, first_name")
+          .eq("id", user.id)
+          .maybeSingle();
+        
+        if (profile) {
+          setUserName(profile.nickname || profile.first_name || "there");
+        }
+      }
+    }
+    fetchProfile();
+  }, []);
 
   const handleCancelTriage = () => {
     if (isSubmittingTriage) {
       return;
     }
     setIsTriageModalVisible(false);
+    setTriageStep(0);
     setAssessmentAnswers(
       Array.from({ length: ASSESSMENT_QUESTIONS.length }, () => null)
     );
@@ -119,6 +151,12 @@ export function DashboardScreen() {
       nextAnswers[questionIndex] = value;
       return nextAnswers;
     });
+    
+    setTimeout(() => {
+      if (triageStep < ASSESSMENT_QUESTIONS.length) {
+        setTriageStep(prev => prev + 1);
+      }
+    }, 300);
   };
 
   const handleSubmitTriage = async () => {
@@ -140,225 +178,164 @@ export function DashboardScreen() {
       .slice(9)
       .reduce((sum, value) => sum + value, 0);
     const notes = additionalNotes.trim();
-    const userInput =
-      notes.length > 0
-        ? notes
-        : `PHQ-9 score: ${phq9Score}; GAD-7 score: ${gad7Score}; no additional notes provided.`;
 
     setIsSubmittingTriage(true);
 
     try {
-      const { data } = await supabase.auth.getUser();
-    if (!data.user) {
-      Alert.alert(
-        "Not Logged In",
-        "Please sign in to submit a triage assessment."
-      );
-      return;
-    }
-    const userId = data.user.id;
+      const triageData = {
+        timestamp: new Date().toISOString(),
+        scores: {
+          phq9: phq9Score,
+          gad7: gad7Score,
+        },
+        answers: assessmentAnswers,
+        notes: notes,
+      };
 
-      const response = await processTriageLog(
-        userId,
-        userInput,
-        phq9Score,
-        gad7Score
-      );
+      console.log("Saving Triage Data to JSON:", JSON.stringify(triageData, null, 2));
+      await new Promise((resolve) => setTimeout(resolve, 1000));
 
       setIsTriageModalVisible(false);
+      setTriageStep(0);
       setAssessmentAnswers(
         Array.from({ length: ASSESSMENT_QUESTIONS.length }, () => null)
       );
       setAdditionalNotes("");
-
-      Alert.alert(
-        "Assessment submitted",
-        `Pathway: ${
-          response.ai_triage_pathway ?? "Triage complete"
-        }\n\nPHQ-9: ${phq9Score} | GAD-7: ${gad7Score}`
-      );
+      navigation.navigate("LOA");
     } catch (error) {
       console.error("Triage submission error:", error);
-      const errorMessage =
-        error instanceof Error ? error.message : String(error ?? "");
-      const hasMissingProfile = errorMessage
-        .toLowerCase()
-        .includes("no employee profile");
-
-      if (hasMissingProfile) {
-        Alert.alert(
-          "Profile Setup Required",
-          "We need a bit more context about your role to give you the best care. Please complete your onboarding profile before using the Triage tool!"
-        );
-      } else {
-        Alert.alert(
-          "Submission Failed",
-          "We couldn't submit your assessment right now. Please check your connection and try again."
-        );
-      }
+      Alert.alert("Error", "Failed to process assessment. Please try again.");
     } finally {
       setIsSubmittingTriage(false);
     }
   };
 
+  const isAtNotesStep = triageStep === ASSESSMENT_QUESTIONS.length;
+  const totalTriageSteps = ASSESSMENT_QUESTIONS.length + 1;
+
   return (
-    <>
-      <ScrollView
-        className="flex-1 bg-neutral-50"
-        contentContainerClassName="px-6 pb-10 pt-6"
-      >
-        <View className="gap-1">
-          <Text className="text-sm font-medium text-neutral-500">
-            Welcome back
-          </Text>
-          <Text className="text-3xl font-bold text-neutral-900">Dashboard</Text>
+    <View className="flex-1">
+      <ScrollView className="flex-1 bg-[#F8FAFA]" contentContainerClassName="px-6 pb-12 pt-12">
+        <View className="mb-8">
+          <Text className="text-base font-medium text-neutral-500 font-jakarta">Welcome back,</Text>
+          <Text className="text-4xl font-bold text-neutral-900 font-jakarta-bold mt-1">Hello, {userName}</Text>
         </View>
-
-        <View className="mt-6 flex-row gap-3">
-          <StatCard label="Today" value="3" helper="Tasks completed" />
-          <StatCard label="Streak" value="7" helper="Days active" />
-        </View>
-
-        <View className="mt-3">
-          <Card className="bg-black">
-            <Text className="text-sm font-medium text-white/70">Focus</Text>
-            <Text className="mt-2 text-2xl font-bold text-white">
-              Plan your next 15 minutes
-            </Text>
-            <Text className="mt-2 text-xs text-white/70">
-              Keep it small. Keep it consistent.
-            </Text>
+        <View className="mb-10">
+          <Card className="bg-white p-8 rounded-[40px] border-none shadow-xl shadow-mint/10 items-center justify-center min-h-[260px]">
+            <View className="h-16 w-16 items-center justify-center rounded-full bg-mint/10 mb-6">
+              <Ionicons name="sparkles" size={32} color="#4FB99F" />
+            </View>
+            <Text className="text-neutral-500 text-sm font-medium uppercase tracking-[2px] mb-3 font-jakarta text-center">Kind Words for You</Text>
+            <Text className="text-2xl font-bold text-neutral-900 text-center leading-tight font-jakarta-bold">{"Mahalaga ang iyong kapayapaan. Take a deep breath; you're doing great."}</Text>
           </Card>
         </View>
-
-        <Pressable
-          className="mx-2 mt-8 items-center justify-center rounded-2xl bg-green-600 px-4 py-4"
-          onPress={() => setIsTriageModalVisible(true)}
-        >
-          <Text className="text-lg font-bold text-white">LOG</Text>
-        </Pressable>
-
-        <View className="mt-6 gap-3">
-          <Text className="text-sm font-semibold text-neutral-900">
-            Quick actions
-          </Text>
-          <QuickAction
-            title="Add a task"
-            subtitle="Capture it before it disappears"
-          />
-          <QuickAction title="Review week" subtitle="See what you shipped" />
-          <QuickAction title="Set a goal" subtitle="Pick one thing to improve" />
+        <View className="mb-10">
+          <Text className="text-sm font-semibold text-neutral-900 mb-4 px-1 font-jakarta-bold">LOA Tracker</Text>
+          <LOATracker status={loaStatus} compact />
+        </View>
+        <View className="items-center mb-10">
+          {loaStatus === "submitted" || loaStatus === "review" ? (
+            <View className="w-full flex-row items-center justify-center rounded-[32px] bg-neutral-200 px-8 py-5">
+              <Ionicons name="lock-closed" size={24} color="#A3A3A3" />
+              <Text className="text-lg font-bold text-neutral-500 ml-2 font-jakarta-bold">TRIAGE LOG ACTIVE</Text>
+            </View>
+          ) : (
+            <Pressable className="w-full flex-row items-center justify-center rounded-[32px] bg-mint px-8 py-5 shadow-lg shadow-mint/30" onPress={() => setIsTriageModalVisible(true)}>
+              <Ionicons name="add-circle" size={24} color="white" />
+              <Text className="text-lg font-bold text-white ml-2 font-jakarta-bold">START TRIAGE LOG</Text>
+            </Pressable>
+          )}
+        </View>
+        <View className="gap-4">
+          <Text className="text-sm font-semibold text-neutral-900 px-1 font-jakarta-bold">Quick Actions</Text>
+          <QuickAction title="Request Leave" subtitle="Apply for a Leave of Absence" icon="calendar-outline" onPress={() => navigation.navigate("LOA")} />
+          <QuickAction title="Review week" subtitle="See what you shipped" icon="stats-chart-outline" />
+          <QuickAction title="Set a goal" subtitle="Pick one thing to improve" icon="ribbon-outline" />
         </View>
       </ScrollView>
-
-      <Modal
-        visible={isTriageModalVisible}
-        animationType="slide"
-        transparent={false}
-        onRequestClose={handleCancelTriage}
-      >
+      <Modal visible={isTriageModalVisible} animationType="slide" transparent={false} onRequestClose={handleCancelTriage}>
         <View className="flex-1 bg-neutral-50">
           <View className="border-b border-neutral-200 bg-white px-5 pb-4 pt-12">
-            <Text className="text-lg font-bold text-neutral-900">
-              Over the last 2 weeks, how often have you been bothered by the
-              following?
-            </Text>
-            <Text className="mt-2 text-xs text-neutral-500">
-              0 = Not at all, 1 = Several days, 2 = More than half the days, 3 =
-              Nearly every day
-            </Text>
+            <View className="flex-row items-center justify-between">
+              <View className="flex-row items-center gap-3">
+                {triageStep > 0 ? (
+                  <Pressable onPress={() => setTriageStep(prev => prev - 1)} className="p-1">
+                    <Ionicons name="arrow-back" size={24} color="#2D3748" />
+                  </Pressable>
+                ) : null}
+                <Text className="text-xl font-bold text-neutral-900 font-jakarta-bold">{isAtNotesStep ? "Final Notes" : "Triage Log"}</Text>
+              </View>
+              <Pressable onPress={handleCancelTriage} className="p-1">
+                <Ionicons name="close" size={28} color="#2D3748" />
+              </Pressable>
+            </View>
+            <View className="mt-6">
+              <ProgressBar currentStep={triageStep + 1} totalSteps={totalTriageSteps} />
+              <View className="flex-row justify-between mt-2">
+                <Text className="text-[10px] font-bold text-mint uppercase tracking-wider font-jakarta-bold">Step {triageStep + 1} of {totalTriageSteps}</Text>
+                <Text className="text-[10px] font-medium text-neutral-400 font-jakarta">{Math.round(((triageStep + 1) / totalTriageSteps) * 100)}% Complete</Text>
+              </View>
+            </View>
           </View>
-
-          <ScrollView
-            className="flex-1"
-            contentContainerClassName="gap-4 px-5 pb-8 pt-4"
-          >
-            {ASSESSMENT_QUESTIONS.map((question, questionIndex) => (
-              <Card key={question} className="p-4">
-                <Text className="text-xs font-semibold text-neutral-500">
-                  Item {questionIndex + 1}
-                </Text>
-                <Text className="mt-1 text-sm font-medium text-neutral-900">
-                  {question}
-                </Text>
-
-                <View className="mt-3 flex-row flex-wrap gap-2">
+          <ScrollView className="flex-1" contentContainerClassName="px-5 py-8">
+            {!isAtNotesStep ? (
+              <View className="gap-6">
+                <View>
+                  <Text className="text-sm font-medium text-neutral-500 mb-2 font-jakarta uppercase tracking-widest text-left">Question {triageStep + 1}</Text>
+                  <Text className="text-2xl font-bold text-neutral-900 font-jakarta-bold leading-tight text-left">{ASSESSMENT_QUESTIONS[triageStep]}</Text>
+                </View>
+                <View className="gap-3 mt-4">
                   {ASSESSMENT_OPTIONS.map((option) => {
-                    const isSelected =
-                      assessmentAnswers[questionIndex] === option.value;
-
+                    const isSelected = assessmentAnswers[triageStep] === option.value;
                     return (
-                      <Pressable
-                        key={`${questionIndex}-${option.value}`}
-                        className={`rounded-full border px-3 py-2 ${
-                          isSelected
-                            ? "border-green-600 bg-green-100"
-                            : "border-neutral-200 bg-white"
-                        }`}
-                        onPress={() =>
-                          handleSelectAnswer(questionIndex, option.value)
-                        }
-                        disabled={isSubmittingTriage}
-                      >
-                        <Text
-                          className={`text-xs font-semibold ${
-                            isSelected ? "text-green-700" : "text-neutral-600"
-                          }`}
-                        >
-                          {option.value}: {option.label}
-                        </Text>
+                      <Pressable key={option.value} className={`rounded-3xl border p-5 flex-row items-center justify-between ${isSelected ? "border-mint bg-mint/5" : "border-neutral-100 bg-white"}`} onPress={() => handleSelectAnswer(triageStep, option.value)} disabled={isSubmittingTriage}>
+                        <View className="flex-1 pr-4">
+                          <Text className={`text-base font-semibold ${isSelected ? "text-mint" : "text-neutral-700"} font-jakarta`}>{option.label}</Text>
+                        </View>
+                        <View className={`h-6 w-6 rounded-full border-2 items-center justify-center ${isSelected ? "border-mint bg-mint" : "border-neutral-200"}`}>
+                          {isSelected ? <Ionicons name="checkmark" size={14} color="white" /> : null}
+                        </View>
                       </Pressable>
                     );
                   })}
                 </View>
-              </Card>
-            ))}
-
-            <Card className="p-4">
-              <Text className="text-sm font-semibold text-neutral-900">
-                Additional notes (optional)
-              </Text>
-              <TextInput
-                value={additionalNotes}
-                onChangeText={setAdditionalNotes}
-                placeholder="Share context you want the triage team to know..."
-                placeholderTextColor="#a3a3a3"
-                multiline
-                textAlignVertical="top"
-                className="mt-3 min-h-[100px] rounded-2xl border border-neutral-200 bg-neutral-50 p-3 text-sm text-neutral-900"
-                editable={!isSubmittingTriage}
-              />
-            </Card>
+                <Text className="mt-8 text-center text-xs text-neutral-400 font-jakarta italic">Tap an option to automatically advance</Text>
+              </View>
+            ) : (
+              <View className="gap-6">
+                <View>
+                  <Text className="text-sm font-medium text-neutral-500 mb-2 font-jakarta uppercase tracking-widest">Wrapping up</Text>
+                  <Text className="text-2xl font-bold text-neutral-900 font-jakarta-bold leading-tight">Anything else on your mind?</Text>
+                  <Text className="text-sm text-neutral-500 mt-2 font-jakarta">Your notes help our triage team understand your context better.</Text>
+                </View>
+                <TextInput value={additionalNotes} onChangeText={setAdditionalNotes} placeholder="Share context you want the triage team to know..." placeholderTextColor="#a3a3a3" multiline textAlignVertical="top" className="mt-2 min-h-[200px] rounded-[32px] border border-neutral-100 bg-white p-6 text-base text-neutral-900 font-jakarta shadow-sm shadow-neutral-100" editable={!isSubmittingTriage} />
+              </View>
+            )}
           </ScrollView>
-
-          <View className="border-t border-neutral-200 bg-white px-5 pb-6 pt-4">
-            <View className="flex-row gap-3">
-              <Pressable
-                className="flex-1 items-center justify-center rounded-2xl bg-neutral-200 px-4 py-3"
-                onPress={handleCancelTriage}
-                disabled={isSubmittingTriage}
-              >
-                <Text className="text-sm font-semibold text-neutral-700">
-                  Cancel
-                </Text>
-              </Pressable>
-              <Pressable
-                className="flex-1 items-center justify-center rounded-2xl bg-green-600 px-4 py-3"
-                onPress={handleSubmitTriage}
-                disabled={isSubmittingTriage}
-              >
+          <View className="border-t border-neutral-100 bg-white px-5 pb-10 pt-4">
+            {isAtNotesStep ? (
+              <Pressable className={`items-center justify-center rounded-[24px] py-4 ${isSubmittingTriage ? "bg-mint/50" : "bg-mint"} shadow-lg shadow-mint/20`} onPress={handleSubmitTriage} disabled={isSubmittingTriage}>
                 {isSubmittingTriage ? (
                   <ActivityIndicator color="#ffffff" />
                 ) : (
-                  <Text className="text-sm font-semibold text-white">
-                    Submit Assessment
-                  </Text>
+                  <Text className="text-base font-bold text-white font-jakarta-bold">Complete Assessment</Text>
                 )}
               </Pressable>
-            </View>
+            ) : (
+              <View className="flex-row gap-3">
+                <Pressable className="flex-1 items-center justify-center rounded-[24px] bg-neutral-100 py-4" onPress={() => { if (triageStep > 0) { setTriageStep((prev) => prev - 1); } else { handleCancelTriage(); } }} disabled={isSubmittingTriage}>
+                  <Text className="text-base font-bold text-neutral-600 font-jakarta-bold">{triageStep === 0 ? "Cancel" : "Back"}</Text>
+                </Pressable>
+                <Pressable className={`flex-1 items-center justify-center rounded-[24px] py-4 ${assessmentAnswers[triageStep] === null ? "bg-mint/30" : "bg-mint"}`} onPress={() => setTriageStep((prev) => prev + 1)} disabled={isSubmittingTriage || assessmentAnswers[triageStep] === null}>
+                  <Text className="text-base font-bold text-white font-jakarta-bold">Next</Text>
+                </Pressable>
+              </View>
+            )}
           </View>
         </View>
       </Modal>
-    </>
+    </View>
   );
 }
+
+

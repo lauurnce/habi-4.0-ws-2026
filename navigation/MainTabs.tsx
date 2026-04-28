@@ -5,11 +5,13 @@ import { DashboardScreen } from "../screens/DashboardScreen";
 import { NotificationsScreen } from "../screens/NotificationsScreen";
 import { ScheduleScreen } from "../screens/ScheduleScreen";
 import { ProfileScreen } from "../screens/ProfileScreen";
+import { LOATrackerScreen } from "../screens/LOATrackerScreen";
 
 type TabsParamList = {
+  Schedule: undefined;
+  Tracker: undefined;
   Home: undefined;
   Notifications: undefined;
-  Schedule: undefined;
   Profile: undefined;
 };
 
@@ -18,6 +20,7 @@ const Tab = createBottomTabNavigator<TabsParamList>();
 export function MainTabs() {
   return (
     <Tab.Navigator
+      initialRouteName="Home"
       screenOptions={({ route }) => ({
         headerShown: false,
         tabBarActiveTintColor: "#111827",
@@ -27,22 +30,33 @@ export function MainTabs() {
           elevation: 0,
         },
         tabBarIcon: ({ color, size }) => {
-          const iconName =
-            route.name === "Home"
-              ? "home-outline"
-              : route.name === "Notifications"
-                ? "notifications-outline"
-                : route.name === "Schedule"
-                  ? "calendar-outline"
-                  : "person-outline";
+          let iconName: keyof typeof Ionicons.glyphMap;
+
+          switch (route.name) {
+            case "Home":
+              iconName = "home-outline";
+              break;
+            case "Notifications":
+              iconName = "notifications-outline";
+              break;
+            case "Tracker":
+              iconName = "analytics-outline";
+              break;
+            case "Schedule":
+              iconName = "calendar-outline";
+              break;
+            default:
+              iconName = "person-outline";
+          }
 
           return <Ionicons name={iconName} size={size} color={color} />;
         },
       })}
     >
+      <Tab.Screen name="Schedule" component={ScheduleScreen} />
+      <Tab.Screen name="Tracker" component={LOATrackerScreen} />
       <Tab.Screen name="Home" component={DashboardScreen} />
       <Tab.Screen name="Notifications" component={NotificationsScreen} />
-      <Tab.Screen name="Schedule" component={ScheduleScreen} />
       <Tab.Screen name="Profile" component={ProfileScreen} />
     </Tab.Navigator>
   );
