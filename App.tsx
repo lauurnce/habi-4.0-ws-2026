@@ -7,6 +7,8 @@ import { SafeAreaProvider } from "react-native-safe-area-context";
 import {
   useFonts,
   PlusJakartaSans_400Regular,
+  PlusJakartaSans_500Medium,
+  PlusJakartaSans_600SemiBold,
   PlusJakartaSans_700Bold,
 } from "@expo-google-fonts/plus-jakarta-sans";
 import * as SplashScreen from "expo-splash-screen";
@@ -19,6 +21,8 @@ SplashScreen.preventAutoHideAsync();
 export default function App() {
   const [fontsLoaded, fontError] = useFonts({
     PlusJakartaSans_400Regular,
+    PlusJakartaSans_500Medium,
+    PlusJakartaSans_600SemiBold,
     PlusJakartaSans_700Bold,
   });
 
@@ -31,9 +35,9 @@ export default function App() {
   // DO NOT return null or a partial tree here, otherwise NavigationContainer won't mount
   return (
     <SafeAreaProvider>
+      <StatusBar style="dark" />
       <NavigationContainer>
         <RootNavigator />
-        <StatusBar style="dark" />
       </NavigationContainer>
     </SafeAreaProvider>
   );

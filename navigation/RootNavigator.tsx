@@ -10,6 +10,11 @@ import { ProfileContextScreen } from "../screens/onboarding/ProfileContextScreen
 import { HealthContextScreen } from "../screens/onboarding/HealthContextScreen";
 import { ReadyScreen } from "../screens/onboarding/ReadyScreen";
 import { DashboardScreen } from "../screens/DashboardScreen";
+import { LOAScreen } from "../screens/LOAScreen";
+import { LOAApprovedScreen } from "../screens/LOAApprovedScreen";
+import { LOADeniedScreen } from "../screens/LOADeniedScreen";
+import { LOASubmittedScreen } from "../screens/LOASubmittedScreen";
+import { LOAReviewScreen } from "../screens/LOAReviewScreen";
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
@@ -29,6 +34,13 @@ export function RootNavigator() {
       <Stack.Screen name="ProfileContext" component={ProfileContextScreen} />
       <Stack.Screen name="HealthContext" component={HealthContextScreen} />
       <Stack.Screen name="Ready" component={ReadyScreen} />
+      <Stack.Screen name="LOA" component={LOAScreen} />
+      
+      {/* LOA Results */}
+      <Stack.Screen name="LOASubmitted" component={LOASubmittedScreen} />
+      <Stack.Screen name="LOAReview" component={LOAReviewScreen} />
+      <Stack.Screen name="LOAApproved" component={LOAApprovedScreen} />
+      <Stack.Screen name="LOADenied" component={LOADeniedScreen} />
     </Stack.Navigator>
   );
 }
