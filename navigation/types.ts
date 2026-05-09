@@ -8,4 +8,9 @@ export type RootStackParamList = {
   ProfileContext: undefined;
   HealthContext: undefined;
   Ready: undefined;
+  LOA: undefined;
+  LOASubmitted: undefined;
+  LOAReview: undefined;
+  LOAApproved: undefined;
+  LOADenied: undefined;
 };
